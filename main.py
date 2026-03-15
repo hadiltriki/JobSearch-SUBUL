@@ -291,7 +291,11 @@ def api_status():
         "remote_ratio": round(market_analysis.remote_ratio, 3),
     }
 
-
+@app.get("/api/user/{user_id}/has_jobs")
+async def check_user_has_jobs(user_id: int):
+    from database import user_has_jobs
+    has = await user_has_jobs(user_id)
+    return {"has_jobs": has}
 @app.get("/api/market")
 async def api_market(user_id: str | None = None):
     top_skills    = [{"skill": s, "count": c} for s, c in market_analysis.skill_counts.most_common(30)]

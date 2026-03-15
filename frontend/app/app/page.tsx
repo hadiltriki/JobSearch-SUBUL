@@ -1039,8 +1039,8 @@ function RoadmapTab({
 //  Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 
-function MatchesTab({ isScanning, scanJobs, jobs, jobsLoad, roleFilter, setRoleFilter, locFilter, setLocFilter, minFit, setMinFit, onSearch }: {
-  isScanning: boolean; scanJobs: Job[]; jobs: Job[]; jobsLoad: boolean;
+function MatchesTab({ isScanning, scanJobs, jobs, jobsLoad, hasLoaded, roleFilter, setRoleFilter, locFilter, setLocFilter, minFit, setMinFit, onSearch }: {
+  isScanning: boolean; scanJobs: Job[]; jobs: Job[]; jobsLoad: boolean; hasLoaded: boolean;
   roleFilter: string; setRoleFilter: (v: string) => void;
   locFilter:  string; setLocFilter:  (v: string) => void;
   minFit: number;     setMinFit:     (v: number) => void;
@@ -1088,7 +1088,14 @@ function MatchesTab({ isScanning, scanJobs, jobs, jobsLoad, roleFilter, setRoleF
         </span>
       </div>
 
-      {jobsLoad && !isScanning && <div style={{ textAlign: "center", padding: 40, color: C.muted }}>Loading matches…</div>}
+      {(jobsLoad || !hasLoaded) && !isScanning && (
+  <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
+    <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 12 }}>
+      {[0, 120, 240].map(d => <div key={d} style={{ width: 8, height: 8, borderRadius: "50%", background: C.p1, animation: `bounce 0.8s ${d}ms ease-in-out infinite` }} />)}
+    </div>
+    <div style={{ fontSize: 14, fontWeight: 600, color: C.muted }}>Finding your best opportunitie…</div>
+  </div>
+)}
 
       {isScanning && scanJobs.length === 0 && (
         <div style={{ textAlign: "center", padding: "80px 20px" }}>
@@ -1114,13 +1121,13 @@ function MatchesTab({ isScanning, scanJobs, jobs, jobsLoad, roleFilter, setRoleF
         </div>
       )}
 
-      {!isScanning && !jobsLoad && jobs.length === 0 && (
-        <div style={{ textAlign: "center", padding: "70px 20px", color: C.muted }}>
-          <div style={{ fontSize: 36, marginBottom: 14 }}>🔍</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 8 }}>No jobs yet</div>
-          <div style={{ fontSize: 12 }}>Go back to the home page and run a scan to populate your matches.</div>
-        </div>
-      )}
+    {!isScanning && !jobsLoad && jobs.length === 0 && hasLoaded && (
+      <div style={{ textAlign: "center", padding: "70px 20px", color: C.muted }}>
+        <div style={{ fontSize: 36, marginBottom: 14 }}>🔍</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 8 }}>No jobs yet</div>
+        <div style={{ fontSize: 12 }}>Go back to the home page and run a scan to populate your matches.</div>
+      </div>
+    )}
 
       {!isScanning && jobs.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(310px,1fr))", gap: 14 }}>
@@ -1157,6 +1164,7 @@ function Dashboard() {
   const [activeTab,  setActiveTab]  = useState<Tab>("matches");
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [jobsLoad,   setJobsLoad]   = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [roleFilter, setRoleFilter] = useState("");
   const [locFilter,  setLocFilter]  = useState("");
   const [minFit,     setMinFit]     = useState(0);
@@ -1172,8 +1180,10 @@ function Dashboard() {
   useEffect(() => {
     if (!userId) { router.replace("/"); return; }
     if (shouldScan) {
-      runScan();          // plus de cv_text
+      window.history.replaceState({}, "", `/jobs-search?user_id=${userId}&scan=1`);
+      runScan();
     } else {
+      window.history.replaceState({}, "", `/jobs-search?user_id=${userId}`);
       fetchUserAndJobs();
     }
   }, []);
@@ -1229,7 +1239,9 @@ function Dashboard() {
         seen.add(j.url); return true;
       });
       setJobs(unique);
-    } finally { setJobsLoad(false); }
+    } finally { 
+      setJobsLoad(false);
+      setHasLoaded(true); }
   }
 
   async function loadGap() {
@@ -1299,12 +1311,16 @@ function Dashboard() {
           case "job":
             enriched++;
             setEnrichN(enriched);
-            setScanJobs(prev => [...prev, d as Job]);
+            setScanJobs(prev => {
+              if (prev.some(j => j.url === d.url)) return prev;
+              return [...prev, d as Job];
+            });
             break;
           case "done":
             setPipeSteps(p => ({ ...p, lang: "done", scrape: "done", enrich: "done" }));
             reader.cancel();
             setScanJobs(prev => { if (prev.length) setJobs([...prev]); return prev; });
+            setHasLoaded(true);
             break;
         }
       }
@@ -1315,7 +1331,8 @@ function Dashboard() {
   } catch (err) {
     console.error("Scan error:", err);
   } finally {
-    setIsScanning(false);
+      window.history.replaceState({}, "", `/jobs-search?user_id=${userId}`);
+      setIsScanning(false);
   }
 }
 
@@ -1367,7 +1384,7 @@ function Dashboard() {
           </div>
 
           {activeTab === "matches" && (
-            <MatchesTab isScanning={isScanning} scanJobs={scanJobs} jobs={jobs} jobsLoad={jobsLoad} roleFilter={roleFilter} setRoleFilter={setRoleFilter} locFilter={locFilter} setLocFilter={setLocFilter} minFit={minFit} setMinFit={setMinFit} onSearch={loadJobs} />
+            <MatchesTab isScanning={isScanning} scanJobs={scanJobs} jobs={jobs} jobsLoad={jobsLoad} hasLoaded={hasLoaded} roleFilter={roleFilter} setRoleFilter={setRoleFilter} locFilter={locFilter} setLocFilter={setLocFilter} minFit={minFit} setMinFit={setMinFit} onSearch={loadJobs} />
           )}
 
           {activeTab === "gap" && (
